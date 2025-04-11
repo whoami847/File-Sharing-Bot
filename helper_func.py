@@ -1,44 +1,49 @@
-#(©)Codexbotz
-
 import base64
 import re
 import asyncio
-import logging 
+import logging
 from pyrogram import filters
 from pyrogram.enums import ChatMemberStatus
 from config import FORCE_SUB_CHANNEL, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG
 from pyrogram.errors.exceptions.bad_request_400 import UserNotParticipant
 from pyrogram.errors import FloodWait
 
-async def is_subscribed(filter, client, update):
+# Function to check if user is subscribed to the channel
+async def is_subscribed(filter, client, update):    
     if not FORCE_SUB_CHANNEL:
         return True
+    
     user_id = update.from_user.id
+    
     if user_id in ADMINS:
         return True
+    
     try:
         member = await client.get_chat_member(chat_id = FORCE_SUB_CHANNEL, user_id = user_id)
     except UserNotParticipant:
         return False
-
+    
     if not member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
         return False
     else:
         return True
 
+# Function to encode string into base64
 async def encode(string):
     string_bytes = string.encode("ascii")
     base64_bytes = base64.urlsafe_b64encode(string_bytes)
     base64_string = (base64_bytes.decode("ascii")).strip("=")
     return base64_string
 
+# Function to decode base64 string back to normal string
 async def decode(base64_string):
-    base64_string = base64_string.strip("=") # links generated before this commit will be having = sign, hence striping them to handle padding errors.
+    base64_string = base64_string.strip("=")  # strip equal signs to handle padding errors
     base64_bytes = (base64_string + "=" * (-len(base64_string) % 4)).encode("ascii")
-    string_bytes = base64.urlsafe_b64decode(base64_bytes) 
+    string_bytes = base64.urlsafe_b64decode(base64_bytes)
     string = string_bytes.decode("ascii")
     return string
 
+# Function to fetch multiple messages from a channel
 async def get_messages(client, message_ids):
     messages = []
     total_messages = 0
@@ -55,12 +60,13 @@ async def get_messages(client, message_ids):
                 chat_id=client.db_channel.id,
                 message_ids=temb_ids
             )
-        except:
+        except Exception as e:
             pass
         total_messages += len(temb_ids)
         messages.extend(msgs)
     return messages
 
+# Function to extract message ID from forwarded message or URL
 async def get_message_id(client, message):
     if message.forward_from_chat:
         if message.forward_from_chat.id == client.db_channel.id:
@@ -70,8 +76,8 @@ async def get_message_id(client, message):
     elif message.forward_sender_name:
         return 0
     elif message.text:
-        pattern = "https://t.me/(?:c/)?(.*)/(\d+)"
-        matches = re.match(pattern,message.text)
+        pattern = r"https://t.me/(?:c/)?(.*)/(\d+)"  # Fixed invalid escape sequence warning
+        matches = re.match(pattern, message.text)
         if not matches:
             return 0
         channel_id = matches.group(1)
@@ -85,11 +91,13 @@ async def get_message_id(client, message):
     else:
         return 0
 
+# Function to convert seconds into readable time format
 def get_readable_time(seconds: int) -> str:
     count = 0
     up_time = ""
     time_list = []
     time_suffix_list = ["s", "m", "h", "days"]
+    
     while count < 4:
         count += 1
         remainder, result = divmod(seconds, 60) if count < 3 else divmod(seconds, 24)
@@ -97,15 +105,18 @@ def get_readable_time(seconds: int) -> str:
             break
         time_list.append(int(result))
         seconds = int(remainder)
+    
     hmm = len(time_list)
     for x in range(hmm):
         time_list[x] = str(time_list[x]) + time_suffix_list[x]
+    
     if len(time_list) == 4:
         up_time += f"{time_list.pop()}, "
     time_list.reverse()
     up_time += ":".join(time_list)
     return up_time
 
+# Function to delete messages after a specified time
 async def delete_file(messages, client, process):
     await asyncio.sleep(AUTO_DELETE_TIME)
     for msg in messages:
@@ -114,8 +125,7 @@ async def delete_file(messages, client, process):
         except Exception as e:
             await asyncio.sleep(e.x)
             print(f"The attempt to delete the media {msg.id} was unsuccessful: {e}")
-
     await process.edit_text(AUTO_DEL_SUCCESS_MSG)
 
-
+# Create a custom filter for checking if a user is subscribed to a channel
 subscribed = filters.create(is_subscribed)
