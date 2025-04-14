@@ -1,59 +1,47 @@
-#(©)Codexbotz
-
+# (©)Codexbotz
+import logging
 import asyncio
-from pyrogram import filters, Client
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import FloodWait
+from pyrogram import Client, filters, enums
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from ..helper_func import encode, get_message_id, get_messages
+from config import ADMINS, SOURCE_CODE, BOT_USERNAME, CUSTOM_CAPTION, AUTO_DELETE_TIME
+from database import Database
 
-from bot import Bot
-from config import ADMINS, CHANNEL_ID, DISABLE_CHANNEL_BUTTON
-from helper_func import encode
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-@Bot.on_message(filters.private & filters.user(ADMINS) & ~filters.command(['start','users','broadcast','batch','genlink','stats']))
-async def channel_post(client: Client, message: Message):
-    reply_text = await message.reply_text("Please Wait...!", quote = True)
+db = Database()
+
+@Client.on_message(filters.private & filters.user(ADMINS) & ~filters.command(['start', 'users', 'broadcast', 'genlink', 'stats', 'add_caption', 'remove_caption']))
+async def channel_post(client: Client, message):
     try:
-        post_message = await message.copy(chat_id = client.db_channel.id, disable_notification=True)
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        post_message = await message.copy(chat_id = client.db_channel.id, disable_notification=True)
+        message_id = await get_message_id(client, message)
+        if message_id == 0:
+            await message.reply("Invalid message or not forwarded from the database channel.")
+            return
+        
+        post_link = f"https://t.me/{BOT_USERNAME}?start={await encode(f'{client.db_channel.id}_{message_id}')}"
+        reply_text = f"Here is the shareable link for this post:\n\n{post_link}"
+
+        if CUSTOM_CAPTION:
+            reply_text += f"\n\n{CUSTOM_CAPTION}"
+
+        reply_markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("🔁 Share URL", url=f"https://t.me/share/url?url={post_link}")],
+             [InlineKeyboardButton("🗑 Close", callback_data="close")]]
+        )
+
+        await message.reply(
+            reply_text,
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML,
+            disable_web_page_preview=True
+        )
+
+        if AUTO_DELETE_TIME:
+            await asyncio.sleep(AUTO_DELETE_TIME)
+            await message.delete()
+            logger.info(f"Deleted message {message.id} after {AUTO_DELETE_TIME} seconds")
     except Exception as e:
-        print(e)
-        await reply_text.edit_text("Something went Wrong..!")
-        return
-    converted_id = post_message.id * abs(client.db_channel.id)
-    string = f"get-{converted_id}"
-    base64_string = await encode(string)
-    link = f"https://t.me/{client.username}?start={base64_string}"
-
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url={link}')]])
-
-    await reply_text.edit(f"<b>Here is your link</b>\n\n{link}", reply_markup=reply_markup, disable_web_page_preview = True)
-
-    if not DISABLE_CHANNEL_BUTTON:
-        try:
-            await post_message.edit_reply_markup(reply_markup)
-        except FloodWait as e:
-            await asyncio.sleep(e.value)
-            await post_message.edit_reply_markup(reply_markup)
-        except Exception:
-            pass
-
-@Bot.on_message(filters.channel & filters.incoming & filters.chat(CHANNEL_ID))
-async def new_post(client: Client, message: Message):
-
-    if DISABLE_CHANNEL_BUTTON:
-        return
-
-    converted_id = message.id * abs(client.db_channel.id)
-    string = f"get-{converted_id}"
-    base64_string = await encode(string)
-    link = f"https://t.me/{client.username}?start={base64_string}"
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url={link}')]])
-    try:
-        await message.edit_reply_markup(reply_markup)
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        await message.edit_reply_markup(reply_markup)
-    except Exception:
-        pass
+        logger.error(f"Error in channel_post: {e}")
+        await message.reply(f"An error occurred: {str(e)}")
