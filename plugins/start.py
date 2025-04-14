@@ -2,7 +2,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import FORCE_SUB_CHANNEL, START_MSG
 from helper_func import check_force_sub
-from pyrogram.errors import InviteRequestSent, UserAlreadyParticipant, UserNotParticipant, ChatAdminRequired
+from pyrogram.errors import ChatAdminRequired
 
 @Client.on_message(filters.command("start") & filters.private)
 async def start_handler(client, message):
