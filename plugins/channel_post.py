@@ -3,7 +3,7 @@ import logging
 import asyncio
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from ..helper_func import encode, get_message_id, get_messages
+from helper_func import encode, get_message_id, get_messages  # সংশোধিত আমদানি
 from config import ADMINS, SOURCE_CODE, BOT_USERNAME, CUSTOM_CAPTION, AUTO_DELETE_TIME
 from database import Database
 
